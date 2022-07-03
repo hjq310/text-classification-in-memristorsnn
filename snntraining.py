@@ -184,6 +184,7 @@ def snntrain(N_EPOCHS, seed, wordemb_matrix, output_dim, T, thres, lr, xbar, \
                                             xbar, RTolerance, Readout, Vread, Vpw, readnoise, \
                                             w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar,\
                                             dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
+    print('snn initialised!')
     best_valid_loss = float('inf')
     for epoch in range(N_EPOCHS):
         start_time = time.time()
@@ -217,4 +218,5 @@ def snntraining(N_EPOCHS, seed, wordemb_matrix, output_dim, T, thres, lr, xbar, 
                         RTolerance, Readout, Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, \
                         a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
                         train_dataloader, valid_dataloader)
+    print('snn trained!')
     snntest(test_dataloader)

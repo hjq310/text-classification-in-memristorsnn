@@ -1,5 +1,5 @@
 import torch
-from inputs import dataset, word_embeddings
+from inputs import inputs
 from anntosnn import anntosnn
 from snntraining import snntraining
 import argparse
@@ -14,18 +14,22 @@ def train(seed, split_ratio, min_freq, BATCH_SIZE, GloVe_name, GloVe_dim, direct
     torch.cuda.manual_seed(SEED)
 
 # datasets and pre-trained word embeddings
-    train_dataloader, valid_dataloader, test_dataloader = dataset(split_ratio, min_freq, BATCH_SIZE)
-    glove_matrix = word_embeddings(GloVe_name, GloVe_dim)
+    input = inputs()
+    train_dataloader, valid_dataloader, test_dataloader = input.dataset(split_ratio, min_freq, BATCH_SIZE)
+    glove_matrix = input.word_embeddings(GloVe_name, GloVe_dim)
+    print('dataset and word embeddings ready!')
     output_dim = 1
 # training
     if directConversion == True: #  conversion from a trained ann into a memristor-based snn
         offset = 25
+        print('start conversion!')
         anntosnn(N_EPOCHS, SEED, offset, glove_matrix, output_dim, \
             lr, T, thres, xbar, RTolerance, Readout, \
             Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, \
             tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
             train_dataloader, valid_dataloader, test_dataloader)
     else: # directing training a memristor-based snn
+        print('start training!')
         snntraining(N_EPOCHS, SEED, glove_matrix, output_dim, T, thres, lr, xbar, \
             RTolerance, Readout, Vread, Vpw, readnoise, w, b, \
             Ap, An, a0p, a0n, a1p, a1n, tp, \
@@ -88,7 +92,7 @@ if __name__=='__main__':
             min_freq = args.min_freq,
             BATCH_SIZE = args.BATCH_SIZE,
             GloVe_name = args.GloVe_name,
-            GloVe_dim = args.GloVe_name,
+            GloVe_dim = args.GloVe_dim,
             directConversion = args.directConversion,
             N_EPOCHS = args.N_EPOCHS,
             lr = args.lr,

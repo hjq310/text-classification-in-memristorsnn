@@ -139,6 +139,7 @@ def anntosnninit(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, RToler
                             True, RTolerance, Readout, Vread, Vpw, readnoise, w,\
                              b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar, \
                              dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
+
     return modelANNtoSNN
 
 def binary_accuracy(preds, y):
@@ -206,6 +207,7 @@ def epoch_time(start_time, end_time):
 
 def anntrain(N_EPOCHS, seed, offset, wordemb_matrix, output_dim, lr, train_dataloader, valid_dataloader):
     optimizer, criterion, model = anninit(seed, offset, wordemb_matrix, output_dim, lr)
+    print('ann initialised!')
     best_valid_loss = float('inf')
 
     for epoch in range(N_EPOCHS):
@@ -244,6 +246,8 @@ def snntest(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, RTolerance,
     modelANNtoSNN = anntosnninit(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, RTolerance, Readout, \
                                     Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar,\
                                     dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
+
+    print('snn initialised!')
     start_time = time.time()
     test_loss, test_acc, _  = evaSNN(modelANNtoSNN, test_dataloader, criterion)
     end_time = time.time()
@@ -258,6 +262,7 @@ def anntosnn(N_EPOCHS, seed, offset, wordemb_matrix, output_dim, \
                 train_dataloader, valid_dataloader, test_dataloader):
 
     fc_weight, emb_weight = anntrain(N_EPOCHS, seed, offset, wordemb_matrix, output_dim, lr, train_dataloader, valid_dataloader)
+    print('ann trained!')
     anntest(test_dataloader)
     snntest(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, RTolerance, Readout, \
                     Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, \
