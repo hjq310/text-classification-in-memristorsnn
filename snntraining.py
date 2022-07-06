@@ -132,6 +132,7 @@ def network_init(seed, wordemb_matrix, output_dim, T, thres, lr, xbar, RToleranc
                     Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
     modelSNN = modelSNN.to(device)
     criterionSNN = nn.BCEWithLogitsLoss()
+
     return modelSNN, criterionSNN
 
 def binary_accuracySNN(preds, y):
@@ -176,14 +177,7 @@ def epoch_time(start_time, end_time):
     elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
     return elapsed_mins, elapsed_secs
 
-def snntrain(N_EPOCHS, seed, wordemb_matrix, output_dim, T, thres, lr, xbar, \
-                    RTolerance, Readout, Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, \
-                    a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
-                    train_dataloader, valid_dataloader):
-    modelSNN, criterionSNN = network_init(seed, wordemb_matrix, output_dim, T, thres, lr, \
-                                            xbar, RTolerance, Readout, Vread, Vpw, readnoise, \
-                                            w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar,\
-                                            dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
+def snntrain(N_EPOCHS, train_dataloader, valid_dataloader, modelSNN, criterionSNN):
     print('snn initialised!')
     best_valid_loss = float('inf')
     for epoch in range(N_EPOCHS):
@@ -200,7 +194,9 @@ def snntrain(N_EPOCHS, seed, wordemb_matrix, output_dim, T, thres, lr, xbar, \
         print(f'\t Val. Loss: {train_loss:.3f} |  Val. Acc: {train_acc*100:.2f}%')
         print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
-def snntest(test_dataloader):
+    return modelSNN, criterionSNN
+
+def snntest(test_dataloader, modelSNN, criterionSNN):
     start_time = time.time()
     model.load_state_dict(torch.load('best-snntrainingmodel.pt'))
     test_loss, test_acc = evaSNN(modelSNN, test_dataloader, criterionSNN)
@@ -214,9 +210,12 @@ def snntraining(N_EPOCHS, seed, wordemb_matrix, output_dim, T, thres, lr, xbar, 
                     a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
                     train_dataloader, valid_dataloader, test_dataloader):
 
-    snntrain(N_EPOCHS, seed, wordemb_matrix, output_dim, T, thres, lr, xbar, \
-                        RTolerance, Readout, Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, \
-                        a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
-                        train_dataloader, valid_dataloader)
+    modelSNN, criterionSNN = network_init(seed, wordemb_matrix, output_dim, T, thres, lr, \
+                                            xbar, RTolerance, Readout, Vread, Vpw, readnoise, \
+                                            w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar,\
+                                            dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
+    print('snn initialised!')
+    snntrain(N_EPOCHS, train_dataloader, valid_dataloader, modelSNN, criterionSNN)
     print('snn trained!')
-    snntest(test_dataloader)
+    snntest(test_dataloader, modelSNN, criterionSNN)
+    print('snn tested!')

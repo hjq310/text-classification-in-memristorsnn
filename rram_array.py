@@ -5,8 +5,6 @@ class rram_array:
     def __init__(self, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar, dt):
         self.w = w
         self.b = b
-        torch.manual_seed(SEED)
-        torch.cuda.manual_seed(SEED)
         self.R = ((torch.rand(self.w, self.b) - 0.5) * Rvar + Rinit).to(device)  # initial the weights
 
         self.Ap = Ap

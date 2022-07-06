@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch import nn
+from rram_array import rram_array, WtoRS, RStoW
 import torch.nn.functional as F
 import time
 import torch.optim as optim
@@ -28,7 +29,7 @@ class WordAVGModel(nn.Module):
         return self.fc(self.pooled).squeeze(1) - self.offset
 
 class ANNtoSNNModel(nn.Module):
-    def __init__(self, fc_weight, emb_weight, output_dim, T, thres, xbar, RTolerance, \
+    def __init__(self, fc_weight, emb_weight, output_dim, T, thres, xbar, MaxN, RTolerance, \
                     Readout, Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, \
                     tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist):
         super().__init__()
@@ -38,12 +39,14 @@ class ANNtoSNNModel(nn.Module):
         self.embedding.load_state_dict({'weight': emb_weight})
         self.embedding.weight.requires_grad = False
         self.output_dim = output_dim
+        self.fc_weight = fc_weight
         self.fc = nn.Linear(self.embedding_dim, self.output_dim, bias = False)
-        self.fc.load_state_dict({'weight': fc_weight})
+        self.fc.load_state_dict({'weight': self.fc_weight})
         self.fc.weight.requires_grad = False
         self.T = T
         self.xbar = xbar
         self.thres= thres
+        self.MaxN = MaxN
         self.RTolerance = RTolerance
         self.readout = Readout
         self.Vread = Vread
@@ -72,7 +75,7 @@ class ANNtoSNNModel(nn.Module):
                                         self.a1n, self.tp, self.tn, self.Rinit, self.Rvar, self.dt)
             self.memristorRS_expected = WtoRS(fc_weight.reshape(self.w, self.b), self.Rmax, self.Rmin)
             self.rramArray.write(self.memristorRS_expected, self.pos_pulselist, self.neg_pulselist, \
-                                    RTolerance = self.RTolerance, Readout = self.readout, \
+                                    MaxN = self.MaxN, RTolerance = self.RTolerance, Readout = self.readout, \
                                     Vread = self.Vread, Vpw = self.Vpw, readnoise = self.readnoise)
             self.memristorRS = self.rramArray.read(Readout = self.readout, Vread = self.Vread, \
                                                     Vpw = self.Vpw, readnoise = self.readnoise)
@@ -98,7 +101,7 @@ class ANNtoSNNModel(nn.Module):
             for t in range(self.T):
                 self.memristorRS = self.rramArray.read(Readout = self.readout, Vread = self.Vread, \
                                                         Vpw = self.Vpw, readnoise = self.readnoise)
-                self.memristorWeight = RStoW(self.memristorRS.flatten(), self.Rmax, self.Rmin).reshape(-1, fc_weight.shape[1])
+                self.memristorWeight = RStoW(self.memristorRS.flatten(), self.Rmax, self.Rmin).reshape(-1, self.fc_weight.shape[1])
                 self.memristorWeight.clamp_(0, 1)
                 if t == 0:
                     self.membraneV[:, :, t] = torch.mm(self.inputSpike[:, :, t], self.memristorWeight.t())
@@ -130,17 +133,18 @@ def anninit(seed, offset, wordemb_matrix, OUTPUT_DIM, lr):
 
     return optimizer, criterion, model
 
-def anntosnninit(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, RTolerance, \
+def anntosnninit(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, MaxN, RTolerance, \
         Readout, Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit,\
         Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    modelANNtoSNN = ANNtoSNNModel(fc_weight, emb_weight, OUTPUT_DIM, T, thres, \
-                            True, RTolerance, Readout, Vread, Vpw, readnoise, w,\
+    modelANNtoSNN = ANNtoSNNModel(fc_weight, emb_weight, output_dim, T, thres, \
+                            True, MaxN, RTolerance, Readout, Vread, Vpw, readnoise, w,\
                              b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar, \
                              dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
+    criterionSNN = nn.BCELoss()
 
-    return modelANNtoSNN
+    return modelANNtoSNN, criterionSNN
 
 def binary_accuracy(preds, y):
     rounded_preds = torch.round(torch.sigmoid(preds))
@@ -184,7 +188,7 @@ def evaluate(model, iterator, criterion):
             epoch_acc += acc.item()
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
-def evaSNN(model, iterator, criterion):
+def evaSNN(model, iterator, criterionSNN):
 
     epoch_loss = 0
     epoch_acc = 0
@@ -205,9 +209,8 @@ def epoch_time(start_time, end_time):
     elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
     return elapsed_mins, elapsed_secs
 
-def anntrain(N_EPOCHS, seed, offset, wordemb_matrix, output_dim, lr, train_dataloader, valid_dataloader):
-    optimizer, criterion, model = anninit(seed, offset, wordemb_matrix, output_dim, lr)
-    print('ann initialised!')
+def anntrain(N_EPOCHS, train_dataloader, valid_dataloader, optimizer, criterion, model):
+
     best_valid_loss = float('inf')
 
     for epoch in range(N_EPOCHS):
@@ -230,40 +233,37 @@ def anntrain(N_EPOCHS, seed, offset, wordemb_matrix, output_dim, lr, train_datal
 
     return model.fc.weight, model.embedding.weight
 
-def anntest(test_dataloader):
+def anntest(model, test_dataloader, criterion):
     start_time = time.time()
     model.load_state_dict(torch.load('wordavg-model.pt'))
-    test_loss, test_acc = evaluate(model, test_dataloader, criterionSNN)
+    test_loss, test_acc = evaluate(model, test_dataloader, criterion)
     end_time = time.time()
     epoch_mins, epoch_secs = epoch_time(start_time, end_time)
     print(f'Time: {epoch_mins}m {epoch_secs}s')
     print(f'\t test. Loss: {test_loss:.3f} |  test. Acc: {test_acc*100:.2f}%')
 
-def snntest(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, RTolerance, Readout, \
-                Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar,\
-                dt, Rmax, Rmin, pos_pulselist, neg_pulselist, test_dataloader):
-
-    modelANNtoSNN = anntosnninit(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, RTolerance, Readout, \
-                                    Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar,\
-                                    dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
-
-    print('snn initialised!')
+def snntest(test_dataloader, modelANNtoSNN, criterionSNN):
     start_time = time.time()
-    test_loss, test_acc, _  = evaSNN(modelANNtoSNN, test_dataloader, criterion)
+    test_loss, test_acc = evaSNN(modelANNtoSNN, test_dataloader, criterionSNN)
     end_time = time.time()
     epoch_mins, epoch_secs = epoch_time(start_time, end_time)
     print(epoch_mins, epoch_secs)
     print(f'\t Val. Loss: {test_loss:.3f} |  Val. Acc: {test_acc*100:.2f}%')
 
 def anntosnn(N_EPOCHS, seed, offset, wordemb_matrix, output_dim, \
-                lr, T, thres, xbar, RTolerance, Readout, Vread, Vpw, \
+                lr, T, thres, xbar, MaxN, RTolerance, Readout, Vread, Vpw, \
                 readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, \
                 tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
                 train_dataloader, valid_dataloader, test_dataloader):
-
-    fc_weight, emb_weight = anntrain(N_EPOCHS, seed, offset, wordemb_matrix, output_dim, lr, train_dataloader, valid_dataloader)
+    optimizer, criterion, model = anninit(seed, offset, wordemb_matrix, output_dim, lr)
+    print('ann initialised!')
+    fc_weight, emb_weight= anntrain(N_EPOCHS, train_dataloader, valid_dataloader, optimizer, criterion, model)
     print('ann trained!')
-    anntest(test_dataloader)
-    snntest(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, RTolerance, Readout, \
-                    Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, \
-                    Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist, test_dataloader)
+    anntest(model, test_dataloader, criterion)
+    print('ann tested!')
+    modelANNtoSNN, criterionSNN = anntosnninit(seed, fc_weight, emb_weight, output_dim, T, thres, xbar, MaxN, RTolerance, Readout, \
+                                    Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar,\
+                                    dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
+    print('snn initialised!')
+    snntest(test_dataloader, modelANNtoSNN, criterionSNN)
+    print('snn tested!')

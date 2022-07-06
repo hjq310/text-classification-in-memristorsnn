@@ -3,9 +3,10 @@ from inputs import inputs
 from anntosnn import anntosnn
 from snntraining import snntraining
 import argparse
+import distutils.util
 
 def train(seed, split_ratio, min_freq, BATCH_SIZE, GloVe_name, GloVe_dim, directConversion,\
-            N_EPOCHS, lr, T, thres, xbar, RTolerance, Readout, Vread, Vpw, readnoise, w, b,\
+            N_EPOCHS, lr, T, thres, xbar, MaxN, RTolerance, Readout, Vread, Vpw, readnoise, w, b,\
             Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, \
             pos_pulselist, neg_pulselist):
 
@@ -24,14 +25,14 @@ def train(seed, split_ratio, min_freq, BATCH_SIZE, GloVe_name, GloVe_dim, direct
         offset = 25
         print('start conversion!')
         anntosnn(N_EPOCHS, SEED, offset, glove_matrix, output_dim, \
-            lr, T, thres, xbar, RTolerance, Readout, \
+            lr, T, thres, xbar, MaxN, RTolerance, Readout, \
             Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, \
             tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
             train_dataloader, valid_dataloader, test_dataloader)
     else: # directing training a memristor-based snn
         print('start training!')
         snntraining(N_EPOCHS, SEED, glove_matrix, output_dim, T, thres, lr, xbar, \
-            RTolerance, Readout, Vread, Vpw, readnoise, w, b, \
+            MaxN, RTolerance, Readout, Vread, Vpw, readnoise, w, b, \
             Ap, An, a0p, a0n, a1p, a1n, tp, \
             tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
             train_dataloader, valid_dataloader, test_dataloader)
@@ -50,14 +51,15 @@ if __name__=='__main__':
     parser.add_argument('--BATCH_SIZE', type=int, default=1, help='batch size')
     parser.add_argument('--GloVe_name', type=str, default='6B', help='GloVe name')
     parser.add_argument('--GloVe_dim', type=int, default=100, help='GloVe dimensions')
-    parser.add_argument('--directConversion', type=bool, default=True, help='conversion of an ANN into an SNN')
+    parser.add_argument('--directConversion', type=lambda x:bool(distutils.util.strtobool(x)), default=True, help='conversion of an ANN into an SNN')
     parser.add_argument('--N_EPOCHS', type=int, default=5, help='number of training epochs')
     parser.add_argument('--lr', type=float, default=0.05, help='learning rate')
     parser.add_argument('--T', type=int, default=1000, help='spike train length for representing a single continuous value')
     parser.add_argument('--thres', type=float, default=50, help='threshold')
-    parser.add_argument('--xbar', type=bool, default=True, help='enable virtual memristor arrays')
+    parser.add_argument('--xbar', type=lambda x:bool(distutils.util.strtobool(x)), default=True, help='enable virtual memristor arrays')
+    parser.add_argument('--MaxN', type=int, default=5, help='maximum iteration times in weight updating')
     parser.add_argument('--RTolerance', type=float, default=0.005, help='R tolerance')
-    parser.add_argument('--Readout', type=bool, default=False, help='enable read-out bias voltage')
+    parser.add_argument('--Readout', type=lambda x:bool(distutils.util.strtobool(x)), default=False, help='enable read-out bias voltage')
     parser.add_argument('--Vread', type=float, default=0.5, help='read-out bias voltage magnitude')
     parser.add_argument('--Vpw', type=float, default=1e-6, help='read-out bias voltage pulse-width')
     parser.add_argument('--readnoise', type=float, default=0, help='readnoise')
@@ -78,7 +80,6 @@ if __name__=='__main__':
     parser.add_argument('--Rmin', type=int, default=2200, help='memristor resistance lower boundary')
 
     args = parser.parse_args()
-
 # pulse options hardwired here. Please change the values according to the R tolerance you choose.
     if args.directConversion == True:
         pos_pulselist = torch.FloatTensor([[0.9, 0.9, 0.9, 0.9, 0.9, 0.9], [1e-6, 2e-6, 1e-5, 2e-5, 5e-5, 1e-4]]).t().to(device)
@@ -99,6 +100,7 @@ if __name__=='__main__':
             T = args.T,
             thres = args.thres,
             xbar = args.xbar,
+            MaxN = args.MaxN,
             RTolerance = args.RTolerance,
             Readout = args.Readout,
             Vread = args.Vread,
