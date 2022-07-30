@@ -32,7 +32,15 @@ Rum `python trian.py --xbar=False` to disable virtual memristor arrays.
 Please refer to `train.py` file to see the details regarding other parameters.
 
 ### Citation
-
+@misc{rram_text_classification,
+  doi = {10.48550/ARXIV.2207.13729},
+  url = {https://arxiv.org/abs/2207.13729},
+  author = {Huang, Jinqi and Serb, Alex and Stathopoulos, Spyros and Prodromakis, Themis},
+  keywords = {Neural and Evolutionary Computing (cs.NE), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {Text Classification in Memristor-based Spiking Neural Networks},
+  note = {arXiv:2207.13729},
+  year = {2022}
+}
 
 ### References
 

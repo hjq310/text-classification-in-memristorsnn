@@ -3,13 +3,12 @@ import torch.nn as nn
 from torch import nn
 import torch.nn.functional as F
 import time
-import rram_array
-import inputs
+from rram_array import rram_array, WtoRS, RStoW
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class SNN(nn.Module):
-    def __init__(self, wordemb_matrix, output_dim, T, thres, lr, xbar, RTolerance, Readout, Vread, Vpw, \
+    def __init__(self, wordemb_matrix, output_dim, T, thres, lr, xbar, MaxN, RTolerance, Readout, Vread, Vpw, \
                     readnoise, w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, \
                     pos_pulselist, neg_pulselist):
 
@@ -29,6 +28,7 @@ class SNN(nn.Module):
         self.ep = 1e-10
         self.thres= thres
         self.xbar = xbar
+        self.MaxN = MaxN
         self.RTolerance = RTolerance
         self.readout = Readout
         self.Vread = Vread
@@ -54,10 +54,12 @@ class SNN(nn.Module):
 
         self.rramArray = rram_array(self.w, self.b, self.Ap, self.An, self.a0p, self.a0n, self.a1p, self.a1n, \
                                         self.tp, self.tn, self.Rinit, self.Rvar, self.dt)
-        self.memristorRS = self.rramArray.read(readnoise = self.readnoise)
+        self.memristorRS = self.rramArray.read(Readout = self.readout, Vread = self.Vread, \
+                                                Vpw = self.Vpw, readnoise = self.readnoise)
         self.memristorWeight = RStoW(self.memristorRS.flatten(), self.Rmax, self.Rmin).reshape(-1, self.fc.weight.shape[1])
         self.memristorWeight.clamp_(0, 1)
-        torch.nn.init.uniform_(self.memristorWeight).to(self.device)
+        #torch.nn.init.uniform_(self.memristorWeight).to(self.device)
+        self.fc.load_state_dict({'weight': self.memristorWeight})
 
     def initVariables(self, batch_size, output_dim, TLen):
         self.membraneV = torch.zeros(batch_size, output_dim, TLen).to(device)
@@ -75,7 +77,8 @@ class SNN(nn.Module):
 
         if self.xbar:
             for t in range(self.T):
-                self.memristorRS = self.rramArray.read(readnoise = self.readnoise)
+                self.memristorRS = self.rramArray.read(Readout = self.readout, Vread = self.Vread, \
+                                                        Vpw = self.Vpw, readnoise = self.readnoise)
                 self.memristorWeight = RStoW(self.memristorRS.flatten(), self.Rmax, self.Rmin).reshape(-1, self.fc.weight.shape[1])
                 self.memristorWeight.clamp_(0, 1)
                 if t == 0:
@@ -109,9 +112,12 @@ class SNN(nn.Module):
             self.emb_grad = torch.mm(self.delta, self.memristorWeight)
             self.memristorWeight_expected = self.memristorWeight - self.lr * self.fc_grad / (self.fc_s ** 0.5  + self.ep)
             self.memristorRS_expected = WtoRS(self.memristorWeight_expected, self.Rmax, self.Rmin)
+            print('expected R:', float(self.memristorRS_expected[0, 0]))
             self.rramArray.write(self.memristorRS_expected.reshape(self.w, self.b), self.pos_pulselist, self.neg_pulselist, \
-                                    RTolerance = self.RTolerance, Readout = self.readout, Vread = self.Vread, \
+                                    MaxN = self.MaxN, RTolerance = self.RTolerance, Readout = self.readout, Vread = self.Vread, \
                                     Vpw = self.Vpw, readnoise = self.readnoise)
+            print('updated R:', float(self.rramArray.R[0, 0]))
+            print('R diff:', float(self.rramArray.R[0, 0]) - float(self.memristorRS_expected[0, 0]))
         else:
             self.emb_grad = torch.mm(self.delta, self.fc.weight)
             self.fc.weight.data = self.fc.weight.data - self.lr * self.fc_grad / (self.fc_s ** 0.5  + self.ep)
@@ -124,12 +130,13 @@ class SNN(nn.Module):
         self.embedding.weight.data = self.embedding.weight.data - self.lr * self.emb_grad / (self.emb_s ** 0.5  + self.ep)
         self.embedding.weight.data.clamp_(0, 1)
 
-def network_init(seed, wordemb_matrix, output_dim, T, thres, lr, xbar, RTolerance, Readout, Vread, Vpw, readnoise, \
+def network_init(seed, wordemb_matrix, output_dim, T, thres, lr, xbar, MaxN, RTolerance, Readout, Vread, Vpw, readnoise, \
                     w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    modelSNN = SNN(wordemb_matrix, output_dim, T, thres, lr, xbar, RTolerance, Readout, Vread, Vpw, readnoise, w, b, \
+    modelSNN = SNN(wordemb_matrix, output_dim, T, thres, lr, xbar, MaxN, RTolerance, Readout, Vread, Vpw, readnoise, w, b, \
                     Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
+    print('initial weight:', float(modelSNN.memristorWeight[0, 0]))
     modelSNN = modelSNN.to(device)
     criterionSNN = nn.BCEWithLogitsLoss()
 
@@ -141,14 +148,16 @@ def binary_accuracySNN(preds, y):
     acc = correct.sum()/len(correct)
     return acc
 
-def trainSNN(model, iterator, criterion):
+def trainSNN(model, iterator, criterionSNN):
     epoch_loss = 0
     epoch_acc = 0
     model.eval()
+
     with torch.no_grad():
         for _, (label, text) in enumerate(iterator):
             predictions = model(text)
             model.plast(label)
+
             loss = criterionSNN(predictions, label.float())
             acc = binary_accuracySNN(predictions, label)
             epoch_loss += loss.item()
@@ -156,7 +165,7 @@ def trainSNN(model, iterator, criterion):
 
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
-def evaSNN(model, iterator, criterion):
+def evaSNN(model, iterator, criterionSNN):
     epoch_loss = 0
     epoch_acc = 0
     model.eval()
@@ -178,7 +187,6 @@ def epoch_time(start_time, end_time):
     return elapsed_mins, elapsed_secs
 
 def snntrain(N_EPOCHS, train_dataloader, valid_dataloader, modelSNN, criterionSNN):
-    print('snn initialised!')
     best_valid_loss = float('inf')
     for epoch in range(N_EPOCHS):
         start_time = time.time()
@@ -191,14 +199,12 @@ def snntrain(N_EPOCHS, train_dataloader, valid_dataloader, modelSNN, criterionSN
             torch.save(modelSNN.state_dict(), 'best-snntrainingmodel.pt')
 
         print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
-        print(f'\t Val. Loss: {train_loss:.3f} |  Val. Acc: {train_acc*100:.2f}%')
+        print(f'\t Val. Loss: {train_loss:.3f} |  Train. Acc: {train_acc*100:.2f}%')
         print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
-
-    return modelSNN, criterionSNN
 
 def snntest(test_dataloader, modelSNN, criterionSNN):
     start_time = time.time()
-    model.load_state_dict(torch.load('best-snntrainingmodel.pt'))
+    modelSNN.load_state_dict(torch.load('best-snntrainingmodel.pt'))
     test_loss, test_acc = evaSNN(modelSNN, test_dataloader, criterionSNN)
     end_time = time.time()
     epoch_mins, epoch_secs = epoch_time(start_time, end_time)
@@ -206,12 +212,12 @@ def snntest(test_dataloader, modelSNN, criterionSNN):
     print(f'\t test. Loss: {test_loss:.3f} |  test. Acc: {test_acc*100:.2f}%')
 
 def snntraining(N_EPOCHS, seed, wordemb_matrix, output_dim, T, thres, lr, xbar, \
-                    RTolerance, Readout, Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, \
+                    MaxN, RTolerance, Readout, Vread, Vpw, readnoise, w, b, Ap, An, a0p, a0n, \
                     a1p, a1n, tp, tn, Rinit, Rvar, dt, Rmax, Rmin, pos_pulselist, neg_pulselist,\
                     train_dataloader, valid_dataloader, test_dataloader):
 
     modelSNN, criterionSNN = network_init(seed, wordemb_matrix, output_dim, T, thres, lr, \
-                                            xbar, RTolerance, Readout, Vread, Vpw, readnoise, \
+                                            xbar, MaxN, RTolerance, Readout, Vread, Vpw, readnoise, \
                                             w, b, Ap, An, a0p, a0n, a1p, a1n, tp, tn, Rinit, Rvar,\
                                             dt, Rmax, Rmin, pos_pulselist, neg_pulselist)
     print('snn initialised!')

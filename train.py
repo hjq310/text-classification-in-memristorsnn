@@ -80,6 +80,9 @@ if __name__=='__main__':
     parser.add_argument('--Rmin', type=int, default=2200, help='memristor resistance lower boundary')
 
     args = parser.parse_args()
+    print('read noise:', args.readnoise)
+    print('R tolerance:', args.RTolerance)
+    print('N epochs:', args.N_EPOCHS)
 # pulse options hardwired here. Please change the values according to the R tolerance you choose.
     if args.directConversion == True:
         pos_pulselist = torch.FloatTensor([[0.9, 0.9, 0.9, 0.9, 0.9, 0.9], [1e-6, 2e-6, 1e-5, 2e-5, 5e-5, 1e-4]]).t().to(device)

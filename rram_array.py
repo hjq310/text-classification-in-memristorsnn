@@ -89,7 +89,9 @@ class rram_array:
 
     def write(self, R_expected, pos_pulselist, neg_pulselist, MaxN, RTolerance, Readout, Vread, Vpw, readnoise):
         for i in range(MaxN):
+            print('current R:', float(self.R[0, 0]))
             self.Read = self.read(Readout, Vread, Vpw, readnoise)
+            print('measured R:', float(self.Read[0, 0]))
             update_v, update_pw = self.weight_update(self.Read, R_expected, pos_pulselist, neg_pulselist)
             update_enable = (torch.abs(R_expected - self.Read) / R_expected > RTolerance).float()
             update_pulseN = (update_pw / self.dt)
@@ -98,6 +100,8 @@ class rram_array:
                 self.R = self.pulse(self.R, update_v * update_enable * update_valid)
                 self.Read = self.read(Readout, Vread, Vpw, readnoise)
                 update_pulseN -= 1
+            print('final R:', float(self.R[0, 0]))
+            print('final measured R:', float(self.Read[0, 0]))
 
 def WtoRS(w, Rmax, Rmin):
     Cmin = 1 / Rmax # mapped to 0
