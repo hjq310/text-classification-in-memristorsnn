@@ -1,6 +1,6 @@
 # snn-with-memristors
 
-Paper available here: [Text Classification in Memristor-based Spiking Neural Networks]()
+Paper available here: [Text Classification in Memristor-based Spiking Neural Networks](https://arxiv.org/abs/2207.13729)
 
 This is a Pytorch-based sentiment analysis task in [the IMDB movie reviews dataset](https://ai.stanford.edu/~amaas/data/sentiment/) using an SNN with a statistic memristor model [here](https://arxiv.org/abs/1703.01167).
 
@@ -32,6 +32,7 @@ Rum `python trian.py --xbar=False` to disable virtual memristor arrays.
 Please refer to `train.py` file to see the details regarding other parameters.
 
 ### Citation
+```
 @misc{rram_text_classification,
   doi = {10.48550/ARXIV.2207.13729},
   url = {https://arxiv.org/abs/2207.13729},
@@ -41,6 +42,7 @@ Please refer to `train.py` file to see the details regarding other parameters.
   note = {arXiv:2207.13729},
   year = {2022}
 }
+```
 
 ### References
 
