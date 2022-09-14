@@ -7,7 +7,7 @@ This is a Pytorch-based sentiment analysis task in [the IMDB movie reviews datas
 This work takes two approaches to obtaining a trained memristor-based SNN: 1) converting a trained ANN to the memristor-based SNN, or 2) training the memristor-based SNN directly.
 
 <center>
-<img src="overview1.svg" width="70%"/>
+<img src="overview.svg" width="80%"/>
 <br>
 <i>Two approaches to obtaining a trained memristor-based SNN</i><br/>
 </center>
