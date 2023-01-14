@@ -1,6 +1,6 @@
 # snn-with-memristors
 
-Paper available here: [Text Classification in Memristor-based Spiking Neural Networks](https://arxiv.org/abs/2207.13729)
+Paper available here: [Text Classification in Memristor-based Spiking Neural Networks](http://iopscience.iop.org/article/10.1088/2634-4386/acb2f0)
 
 This is a Pytorch-based sentiment analysis task in [the IMDB movie reviews dataset](https://ai.stanford.edu/~amaas/data/sentiment/) using an SNN with a statistic memristor model [here](https://arxiv.org/abs/1703.01167).
 
