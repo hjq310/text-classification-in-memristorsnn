@@ -33,14 +33,12 @@ Please refer to `train.py` file to see the details regarding other parameters.
 
 ### Citation
 ```
-@misc{rram_text_classification,
-  doi = {10.48550/ARXIV.2207.13729},
-  url = {https://arxiv.org/abs/2207.13729},
-  author = {Huang, Jinqi and Serb, Alex and Stathopoulos, Spyros and Prodromakis, Themis},
-  keywords = {Neural and Evolutionary Computing (cs.NE), FOS: Computer and information sciences, FOS: Computer and information sciences},
-  title = {Text Classification in Memristor-based Spiking Neural Networks},
-  note = {arXiv:2207.13729},
-  year = {2022}
+@article{10.1088/2634-4386/acb2f0,
+	author={Huang, Jinqi and Serb, Alexantrou and Stathopoulos, Spyros and Prodromakis, Themis},
+	title={Text classification in memristor-based spiking neural networks},
+	journal={Neuromorphic Computing and Engineering },
+	url={http://iopscience.iop.org/article/10.1088/2634-4386/acb2f0},
+	year={2023}
 }
 ```
 
